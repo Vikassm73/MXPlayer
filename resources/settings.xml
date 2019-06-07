@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<settings>
+    <category label="Language Selection">
+        <setting id="bn" type="bool" label="Bengali?" default="true" />
+        <setting id="en" type="bool" label="English?" default="true" />
+        <setting id="gu" type="bool" label="Gujarathi?" default="true" />
+        <setting id="hi" type="bool" label="Hindi?" default="true" />
+        <setting id="kn" type="bool" label="Kannada?" default="true" />
+        <setting id="ml" type="bool" label="Malayalam?" default="true" />
+        <setting id="mr" type="bool" label="Marathi?" default="true" />
+        <setting id="ta" type="bool" label="Tamil?" default="true" />
+        <setting id="te" type="bool" label="Telugu?" default="true" />
+        <setting id="pa" type="bool" label="Punjabi?" default="true" />
+    </category>
+
+    <category label="General">
+        <setting id="debug" type="bool" label="Enable Debug Logs?" default="false" />
+    </category>
+
+</settings>
