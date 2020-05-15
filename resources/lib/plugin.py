@@ -15,6 +15,7 @@ from datetime import datetime
 import xbmcgui
 import xbmcplugin
 import xbmc
+import web_pdb
 import requests
 import itertools
 import operator
@@ -74,18 +75,6 @@ class MxPlayerPlugin(object):
         }
 
         return headers
-    """
-    def _get_video_token(self):
-        data = self.make_request('https://useraction.zee5.com/tokennd/')
-        return data['video_token']
-   
-        
-    def _get_token(self):
-        data = self.make_request(
-            'https://useraction.zee5.com/token/platform_tokens.php?platform_name={}'.format(self.platform)
-        )
-        return data['token']
-    """
     
     def list_season(self, season_id, season_name):
         # Set plugin category. It is displayed in some skins as the name
@@ -112,10 +101,10 @@ class MxPlayerPlugin(object):
         # Finish creating a virtual folder.
         xbmcplugin.endOfDirectory(self.handle)
 
-    def list_show(self, show_id, show_name, show_next):
+    def list_show(self, show_id, title, show_next):
         # Set plugin category. It is displayed in some skins as the name
         # of the current section.
-        xbmcplugin.setPluginCategory(self.handle, show_name)
+        xbmcplugin.setPluginCategory(self.handle, title)
         
         data = self.make_request(self.MainUrl+'detail/tab/tvshowepisodes?{}&type=season&id={}&userid={}&platform={}&content-languages={}'.format(show_next,show_id,self.userid,self.platform,self.languages))
 
@@ -123,7 +112,7 @@ class MxPlayerPlugin(object):
             self.add_video_item(shows)
             
         self.add_next_page_and_search_item(
-            item=data, original_title=show_name, action='show')
+            item=data, original_title=title, action='show')
 
         # Add a sort method for the virtual folder items (alphabetically, ignore articles)
         xbmcplugin.addSortMethod(self.handle, xbmcplugin.SORT_METHOD_NONE)
@@ -205,11 +194,9 @@ class MxPlayerPlugin(object):
         # Set plugin category. It is displayed in some skins as the name
         # of the current section.
         xbmcplugin.setPluginCategory(self.handle, 'sections')
-        
         data = self.make_request(self.MainUrl+'home/tab/{}?{}&userid={}&platform={}&content-languages={}'.format(sec_id, sec_next,self.userid,self.platform,self.languages))
 
         for item in data['sections']:
-
             self.add_directory_item(
                 title=item.get('name'),
                 content_id=item.get('id'),
@@ -246,15 +233,8 @@ class MxPlayerPlugin(object):
         # Set plugin category. It is displayed in some skins as the name
         # of the current section.
         xbmcplugin.setPluginCategory(self.handle, 'Search/{}'.format(query))
-        #https://api.mxplay.com/v1/web/search/result?query=DEV%2520DD&userid=0c052402-027c-4921-9c68-17261a19a77f&platform=com.mxplay.desktop&content-languages=mr
 
         data = self.make_request(self.MainUrl+'search/result?query={}&userid={}&platform={}&content-languages={}'.format(quote(query),self.userid,self.platform,self.languages))
-        #data = self.make_request(url)
-        """
-        if not data.get('numFound'):
-            kodiutils.notification('No Search Results', 'No item found for {}'.format(query))
-            return
-        """
         
         for item in data['sections']:
             
@@ -352,8 +332,8 @@ class MxPlayerPlugin(object):
 
     def add_video_item(self, video):
         # Create a list item with a text label and a thumbnail image.
+
         episode_no = video.get('sequence')
-        #title = video['title']
         episode_date = video.get('releaseDate')
 
         if episode_date:
@@ -382,6 +362,7 @@ class MxPlayerPlugin(object):
         else: 
             VideoType = video.get('type')
                         
+        #web_pdb.set_trace()
         videoid=video['id']
         if video['stream']:
             if video['stream'].get('provider')== 'youtube':
@@ -409,6 +390,7 @@ class MxPlayerPlugin(object):
         list_item = xbmcgui.ListItem(label=title)
 
         # Set additional info for the list item.
+
         description=self.get_description(video)
         
         list_item.setInfo('video', {
@@ -425,12 +407,13 @@ class MxPlayerPlugin(object):
 
         # Set graphics (thumbnail, fanart, banner, poster, landscape etc.) for the list item.
         # Here we use the same image for all items for simplicity's sake.
-        #list_image, cover_image = MxPlayerPlugin.get_images(video)
-        #list_item.setArt({
-        #    'thumb': list_image or cover_image,
-        #    'icon': list_image or cover_image,
-        #    'fanart': cover_image or list_image,
-        #})
+        if VideoType != 'liveChannel':
+	        list_image, cover_image = MxPlayerPlugin.get_images(video)
+	        list_item.setArt({
+	            'thumb': list_image or cover_image,
+	            'icon': list_image or cover_image,
+	            'fanart': cover_image or list_image,
+	        })
 
         # Set 'IsPlayable' property to 'true'.
         # This is mandatory for playable items!
@@ -464,7 +447,6 @@ class MxPlayerPlugin(object):
         # Set graphics (thumbnail, fanart, banner, poster, landscape etc.) for the list item.
         # Here we use the same image for all items for simplicity's sake.
         # In a real-life plugin you need to set each image accordingly.
-
         if item and item.get('image') is not None:
             list_image, cover_image = MxPlayerPlugin.get_images(item)
             list_item.setArt({
@@ -588,16 +570,22 @@ class MxPlayerPlugin(object):
         logger.debug('Playing video: {}'.format(video_url))
         # Create a playable item with a path to play.
         
-        
+                
         play_item = xbmcgui.ListItem(label=title, path=video_url)
 
-        
-        play_item.setProperty('inputstream.adaptive.license_type', 'com.widevine.alpha')
-        play_item.setProperty('inputstream.adaptive.manifest_type', 'hls')
+        #header=self._get_headers()
+        #licURL='https://api.mxplay.com/v1/drm/balaji/ticket/?&streamId={}'.format(item_id)
 
-        play_item.setProperty('inputstreamaddon', 'inputstream.adaptive')
-        play_item.setMimeType('application/dash+xml')
-        play_item.setContentLookup(False)
+        #header="User-Agent=Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.169 Safari/537.36"
+        #header=header+"&content_provider=xstream1"
+        
+        #play_item.setProperty('inputstream.adaptive.license_type', 'com.widevine.alpha')
+        #play_item.setProperty('inputstream.adaptive.manifest_type', 'hls')
+        #play_item.setProperty('inputstream.adaptive.license_key', licURL)
+        #play_item.setProperty("inputstream.adaptive.stream_headers", header)
+        #play_item.setProperty('inputstreamaddon', 'inputstream.adaptive')
+        #play_item.setMimeType('application/dash+xml')
+        #fplay_item.setContentLookup(False)
 
 
         # Pass the item to the Kodi player.
@@ -605,6 +593,7 @@ class MxPlayerPlugin(object):
 
     def get_video_url(item):
 
+            
         for video in item['items']:
             if video['stream']['sony'] is not None: 
                 hls_url = video['stream']['sony'].get('dashUrl')
@@ -616,13 +605,7 @@ class MxPlayerPlugin(object):
             else: 
                 continue
                 
-        """    
-        if not hls_url:
-            kodiutils.notification(
-                "Video URL missing!", "Missing video URL for {}".format(data.get('title')),
-            )
-            return
-        """
+
         return '{url}'.format(url=hls_url)
        
 
