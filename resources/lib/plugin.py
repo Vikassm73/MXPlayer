@@ -134,7 +134,7 @@ class MxPlayerPlugin(object):
             logger.warn('items data is empty for folder! -- {}'.format(data))
             kodiutils.notification('No items found', 'Check logs for api content!')
             return
-
+        #web_pdb.set_trace()
         for item in data['items']:
             if item['container'] is not None: 
                 subtype = item['container'].get('type')
@@ -261,6 +261,14 @@ class MxPlayerPlugin(object):
         return response.json()
 
     @staticmethod
+    def is_url_image(image_url):
+       image_formats = ("image/png", "image/jpeg", "image/jpg")
+       r = requests.head(image_url)
+       if r.headers["content-type"] in image_formats:
+          return True
+       return False
+
+    @staticmethod
     def get_genre(item):
         """
         Returns a string of genre -- comma separated if multiple genres.
@@ -278,8 +286,7 @@ class MxPlayerPlugin(object):
         """
         Returns video description.
         """
-        #
-        
+        #web_pdb.set_trace()
         publisher=''
         provider=''
         actor = []
@@ -308,15 +315,27 @@ class MxPlayerPlugin(object):
         """
         Returns a tuple of list_image & cover_image.
         """
+        #web_pdb.set_trace()  
+
         if item['image'].get('16x9') is not None: 
             base_images = item['image'].get('16x9')
         else:
             base_images = item['publisher']['image'].get('16x9')
         
+        #if item['imageInfo'][0].get('url') is not None: 
+        #    base_images = item['imageInfo'][0].get('url')
+
         if base_images is not None: 
             Segments = base_images.rpartition('/')
-            images='https://j2apps.s.llnwi.net/is1'+Segments[0]+'/16x9/1x/'+Segments[2]
-            
+            images1='https://j2apps.s.llnwi.net/is1'+Segments[0]+'/16x9/9x/'+Segments[2]
+        
+        #images2=None
+
+        if item['imageInfo'][1].get('url') is not None: 
+            images2 = 'https://isa-1.mxplay.com/'+item['imageInfo'][1].get('url')
+
+        if images2 is None:
+            images2=images1
         """
         if base_images[:4]=='http':
             images1=base_images
@@ -324,11 +343,11 @@ class MxPlayerPlugin(object):
         else:
             images1='https://j2apps.s.llnwi.net/' + base_images
             images2='https://j2apps.s.llnwi.net/' + item['image'].get('2x3')
-        """
+        
         if not images:
             return None, None
-
-        return images, images
+        """
+        return images1, images2
 
     def add_video_item(self, video):
         # Create a list item with a text label and a thumbnail image.
@@ -362,7 +381,7 @@ class MxPlayerPlugin(object):
         else: 
             VideoType = video.get('type')
                         
-        #web_pdb.set_trace()
+        
         videoid=video['id']
         if video['stream']:
             if video['stream'].get('provider')== 'youtube':
@@ -431,6 +450,7 @@ class MxPlayerPlugin(object):
         # Add our item to the Kodi virtual folder listing.
         xbmcplugin.addDirectoryItem(self.handle, url, list_item, is_folder)
         xbmcplugin.setContent(self.handle, 'videos')
+
         
     def add_directory_item(
         self,
@@ -448,20 +468,22 @@ class MxPlayerPlugin(object):
         # Here we use the same image for all items for simplicity's sake.
         # In a real-life plugin you need to set each image accordingly.
         if item and item.get('image') is not None:
-            list_image, cover_image = MxPlayerPlugin.get_images(item)
+            cover_image, list_image = MxPlayerPlugin.get_images(item)
             list_item.setArt({
+                'poster': list_image or cover_image,
                 'thumb': list_image or cover_image,
                 'icon': list_image or cover_image,
                 'fanart': cover_image or list_image
             })
 
+        #web_pdb.set_trace()
 
         list_item.setInfo('video', {
             'count': content_id,
             'title': title,
             'genre': self.get_genre(item),
             'plot': description,
-            'mediatype': 'video'
+            'mediatype': 'tvshow'
         })
 
         # Create a URL for a plugin recursive call.
@@ -579,13 +601,13 @@ class MxPlayerPlugin(object):
         #header="User-Agent=Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.169 Safari/537.36"
         #header=header+"&content_provider=xstream1"
         
-        #play_item.setProperty('inputstream.adaptive.license_type', 'com.widevine.alpha')
-        #play_item.setProperty('inputstream.adaptive.manifest_type', 'hls')
+        play_item.setProperty('inputstream.adaptive.license_type', 'com.widevine.alpha')
+        play_item.setProperty('inputstream.adaptive.manifest_type', 'hls')
         #play_item.setProperty('inputstream.adaptive.license_key', licURL)
         #play_item.setProperty("inputstream.adaptive.stream_headers", header)
-        #play_item.setProperty('inputstreamaddon', 'inputstream.adaptive')
-        #play_item.setMimeType('application/dash+xml')
-        #fplay_item.setContentLookup(False)
+        play_item.setProperty('inputstreamaddon', 'inputstream.adaptive')
+        play_item.setMimeType('application/dash+xml')
+        play_item.setContentLookup(False)
 
 
         # Pass the item to the Kodi player.
