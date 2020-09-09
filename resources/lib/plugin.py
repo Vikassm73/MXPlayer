@@ -600,15 +600,20 @@ class MxPlayerPlugin(object):
 
         #header="User-Agent=Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.169 Safari/537.36"
         #header=header+"&content_provider=xstream1"
-        
+        #web_pdb.set_trace()
+
         play_item.setProperty('inputstream.adaptive.license_type', 'com.widevine.alpha')
-        play_item.setProperty('inputstream.adaptive.manifest_type', 'hls')
-        #play_item.setProperty('inputstream.adaptive.license_key', licURL)
-        #play_item.setProperty("inputstream.adaptive.stream_headers", header)
+        if (video_url.find('mpd') != -1):
+        	play_item.setProperty('inputstream.adaptive.manifest_type', 'mpd')
+        else:
+        	play_item.setProperty('inputstream.adaptive.manifest_type', 'hls')
         play_item.setProperty('inputstreamaddon', 'inputstream.adaptive')
         play_item.setMimeType('application/dash+xml')
         play_item.setContentLookup(False)
 
+
+        #play_item.setProperty('inputstream.adaptive.license_key', licURL)
+        #play_item.setProperty("inputstream.adaptive.stream_headers", header)
 
         # Pass the item to the Kodi player.
         xbmcplugin.setResolvedUrl(self.handle, True, listitem=play_item)     
