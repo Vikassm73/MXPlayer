@@ -1,7 +1,7 @@
 from .kodiutils import get_setting_as_bool
 
 LANGUAGES = [
-    "ta", "kn", "pa", "bn", "en", "ml", "mr", "hr", "gu", "te", "hi"
+    "ta", "kn", "pa", "bn", "en", "ml", "mr",  "gu", "te", "hi"
 ]
 
 DEFAULT_LANGUAGES = 'en,ta'

@@ -1,31 +1,32 @@
-﻿# -*- coding: utf-8 -*-
+# -*- coding: utf-8 -*-
 import logging
 import xbmcaddon
 from . import kodilogging
 from . import kodiutils
 from . import settings
 import sys
-
-from urllib import urlencode
-from urllib import quote
-from urlparse import parse_qsl
-
+"""
+try:  # Python 2
+    from urllib import urlencode, quote_plus
+    from urlparse import parse_qsl
+except ImportError:  # Python 3
+    from urllib.parse import parse_qsl, urlencode, quote_plus
+"""
+import six
+from six.moves import urllib_parse
+from kodi_six import xbmc, xbmcplugin, xbmcgui
 from datetime import datetime
-
-import xbmcgui
-import xbmcplugin
-import xbmc
 import web_pdb
 import requests
 import itertools
 import operator
 import collections
 import time
-import urlresolver
+import resolveurl
 
 ADD_ON = xbmcaddon.Addon()
 logger = logging.getLogger(ADD_ON.getAddonInfo('id'))
-kodilogging.config(logger)
+kodilogging.config()
 
 _category_t = collections.namedtuple('Category', ['id', 'title', 'item'])
 
@@ -47,10 +48,10 @@ class MxPlayerPlugin(object):
         self.handle = int(plugin_args[1])
         # Parse a URL-encoded paramstring to the dictionary of
         # {<parameter>: <value>} elements
-        self.params = dict(parse_qsl(plugin_args[2][1:]))
+        self.params = dict(urllib_parse.parse_qsl(plugin_args[2][1:]))
         self.MainUrl='https://api.mxplay.com/v1/web/'
         # Static data
-        self.userid='3369f42b-b2ee-41a2-8cfe-84595a464920'
+        self.userid='f352861d-1f82-4385-9e36-c0aef02edb65'
         self.platform = 'com.mxplay.desktop'
         self.languages = settings.get_languages()
         self.session = requests.Session()
@@ -60,59 +61,69 @@ class MxPlayerPlugin(object):
 
     def _get_headers(self):
         headers = {
-            "Origin": "https://www.mxplayer.in/",
+            "Origin": "https://www.mxplayer.in",
             "User-Agent": "Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.103 Safari/537.36",
             "Accept": "*/*",
             "Referer": "https://www.mxplayer.in/",
             "Accept-Encoding": "gzip, deflate, br",
-            "Accept-Language": "en-US,en;q=0.9",
-            "Accept": "application/json, text/plain, */*",
-            "Accept-Language": "en-US,en;q=0.9",
-            "ETag": "e6c486f793039c8299886cfcc943872c",
-            "Server": "AmazonS3",
-            "X-Amz-Cf-Id": "IDsM0D5mTKMqip290NYYsFjkUXDHvg7o93lucYuBhPW2R6yUUJ38xw==",
-            "x-amz-version-id": "QAh42F5_lCNbCTHV3fVwqn.Afjm1yWdd"
+            "Accept-Language": "en-GB,en-US;q=0.9,en;q=0.8,hi;q=0.7"
         }
 
         return headers
-    
-    def list_season(self, season_id, season_name):
+
+
+    def list_main(self):
         # Set plugin category. It is displayed in some skins as the name
         # of the current section.
-        xbmcplugin.setPluginCategory(self.handle, season_name)
+        xbmcplugin.setPluginCategory(self.handle, 'main')
 
-        data = self.make_request(self.MainUrl+'detail/collection?type=tvshow&id={}&userid={}&platform={}&content-languages={}'.format(season_id,self.userid,self.platform,self.languages))
-
-        for season in data['tabs'][0]['containers']:
+        for category in MxPlayerPlugin.MAIN_CATEGORIES['Main']:
             self.add_directory_item(
-                title=season['title'],
-                content_id=season['id'],
-                description=season.get('description'),
-                action='show',
+                content_id=category[0],
+                title=category[1],
+                description=category[1],
+                action='sections',
                 section_next='first',
-                item=season
+                item=None
             )
 
-                    
-        #self.add_search_item()
+        self.add_search_item()
 
         # Add a sort method for the virtual folder items (alphabetically, ignore articles)
-        #xbmcplugin.addSortMethod(self.handle, xbmcplugin.SORT_METHOD_NONE)
+        xbmcplugin.addSortMethod(self.handle, xbmcplugin.SORT_METHOD_NONE)
+
         # Finish creating a virtual folder.
         xbmcplugin.endOfDirectory(self.handle)
 
-    def list_show(self, show_id, title, show_next):
+
+    def list_sections(self,sec_id, sec_next):
         # Set plugin category. It is displayed in some skins as the name
         # of the current section.
-        xbmcplugin.setPluginCategory(self.handle, title)
-        
-        data = self.make_request(self.MainUrl+'detail/tab/tvshowepisodes?{}&type=season&id={}&userid={}&platform={}&content-languages={}'.format(show_next,show_id,self.userid,self.platform,self.languages))
+        xbmcplugin.setPluginCategory(self.handle, 'sections')
+        data = self.make_request(self.MainUrl+'home/tab/{}?{}&userid={}&platform={}&content-languages={}'.format(sec_id, sec_next,self.userid,self.platform,self.languages))
+        #web_pdb.set_trace()
+        for item in data['sections']:
+            self.add_directory_item(
+                title=item.get('name'),
+                content_id=item.get('id'),
+                description=item.get('name'),
+                section_next=item.get('next'),
+                action='folder'
+            )
 
-        for shows in data['items']:
-            self.add_video_item(shows)
-            
-        self.add_next_page_and_search_item(
-            item=data, original_title=title, action='show')
+        if data['next'] is not None:
+	        data = self.make_request(self.MainUrl+'home/tab/{}?{}&userid={}&platform={}&content-languages={}'.format(sec_id, data['next'],self.userid,self.platform,self.languages))
+	        #web_pdb.set_trace()
+	        for item in data['sections']:
+	            self.add_directory_item(
+	                title=item.get('name'),
+	                content_id=item.get('id'),
+	                description=item.get('name'),
+	                section_next=item.get('next'),
+	                action='folder'
+	            )       	
+	        self.add_next_page_and_search_item(
+	            item=data, original_title='sections', action='sections')
 
         # Add a sort method for the virtual folder items (alphabetically, ignore articles)
         xbmcplugin.addSortMethod(self.handle, xbmcplugin.SORT_METHOD_NONE)
@@ -125,7 +136,7 @@ class MxPlayerPlugin(object):
         # of the current section.
         xbmcplugin.setPluginCategory(self.handle, folder_name)
         
-
+        #web_pdb.set_trace()
         data = self.make_request(self.MainUrl+
             'list/{}?{}&userid={}&platform={}&content-languages={}'.format(folder_id,folder_name,self.userid,self.platform,self.languages)
             )        
@@ -134,7 +145,7 @@ class MxPlayerPlugin(object):
             logger.warn('items data is empty for folder! -- {}'.format(data))
             kodiutils.notification('No items found', 'Check logs for api content!')
             return
-        #web_pdb.set_trace()
+
         for item in data['items']:
             if item['container'] is not None: 
                 subtype = item['container'].get('type')
@@ -190,30 +201,50 @@ class MxPlayerPlugin(object):
         xbmcplugin.endOfDirectory(self.handle)
 
 
-    def list_sections(self,sec_id, sec_next):
+    def list_season(self, season_id, season_name):
         # Set plugin category. It is displayed in some skins as the name
         # of the current section.
-        xbmcplugin.setPluginCategory(self.handle, 'sections')
-        data = self.make_request(self.MainUrl+'home/tab/{}?{}&userid={}&platform={}&content-languages={}'.format(sec_id, sec_next,self.userid,self.platform,self.languages))
+        xbmcplugin.setPluginCategory(self.handle, season_name)
 
-        for item in data['sections']:
+        data = self.make_request(self.MainUrl+'detail/collection?type=tvshow&id={}&userid={}&platform={}&content-languages={}'.format(season_id,self.userid,self.platform,self.languages))
+
+        for season in data['tabs'][0]['containers']:
             self.add_directory_item(
-                title=item.get('name'),
-                content_id=item.get('id'),
-                description=item.get('name'),
-                section_next=item.get('next'),
-                action='folder'
+                title=season['title'],
+                content_id=season['id'],
+                description=season.get('description'),
+                action='show',
+                section_next='first',
+                item=season
             )
 
-        
+                    
+        #self.add_search_item()
+
+        # Add a sort method for the virtual folder items (alphabetically, ignore articles)
+        #xbmcplugin.addSortMethod(self.handle, xbmcplugin.SORT_METHOD_NONE)
+        # Finish creating a virtual folder.
+        xbmcplugin.endOfDirectory(self.handle)
+
+    def list_show(self, show_id, title, show_next):
+        # Set plugin category. It is displayed in some skins as the name
+        # of the current section.
+        xbmcplugin.setPluginCategory(self.handle, title)
+        #web_pdb.set_trace()
+        data = self.make_request(self.MainUrl+'detail/tab/tvshowepisodes?{}&type=season&id={}&userid={}&platform={}&content-languages={}'.format(show_next,show_id,self.userid,self.platform,self.languages))
+
+        for shows in data['items']:
+            self.add_video_item(shows)
+            
         self.add_next_page_and_search_item(
-            item=data, original_title='sections', action='sections')
+            item=data, original_title=title, action='show')
 
         # Add a sort method for the virtual folder items (alphabetically, ignore articles)
         xbmcplugin.addSortMethod(self.handle, xbmcplugin.SORT_METHOD_NONE)
 
         # Finish creating a virtual folder.
         xbmcplugin.endOfDirectory(self.handle)
+
 
     @staticmethod
     def get_user_input():
@@ -234,7 +265,7 @@ class MxPlayerPlugin(object):
         # of the current section.
         xbmcplugin.setPluginCategory(self.handle, 'Search/{}'.format(query))
 
-        data = self.make_request(self.MainUrl+'search/result?query={}&userid={}&platform={}&content-languages={}'.format(quote(query),self.userid,self.platform,self.languages))
+        data = self.make_request(self.MainUrl+'search/result?query={}&userid={}&platform={}&content-languages={}'.format(urllib_parse.quote_plus(query),self.userid,self.platform,self.languages))
         
         for item in data['sections']:
             
@@ -294,9 +325,9 @@ class MxPlayerPlugin(object):
         for items in item['contributors']:
             if items.get('type')=='actor': 
                 if items.get('name') is not None:
-                    actor.append (items.get('name').encode("utf-8"))
+                    actor.append (items.get('name'))
             elif items.get('type')=='director':
-                director.append (items.get('name').encode("utf-8"))
+                director.append (items.get('name'))
         
         myactor = ",".join(actor)
         mydirector = ",".join(director)
@@ -305,8 +336,8 @@ class MxPlayerPlugin(object):
         if item['stream'] is not None:
             provider=item['stream'].get('provider')
         
-        
-        description='Actor : {} \nDirector : {} \nPublisher : {} \nProvider : {}'.format(myactor,mydirector,publisher,provider)
+        #web_pdb.set_trace()
+        description='Actor : {} \nDirector : {} \nPublisher : {} \nProvider : {}'.format(myactor.encode('utf8'),mydirector.encode('utf8'),publisher,provider)
 
         return description
     
@@ -381,24 +412,24 @@ class MxPlayerPlugin(object):
         else: 
             VideoType = video.get('type')
                         
-        
+        #web_pdb.set_trace()
         videoid=video['id']
         if video['stream']:
             if video['stream'].get('provider')== 'youtube':
                 stream_url='https://www.youtube.com/embed/{}?autoplay=1&rel=0&modestbranding=1&playsinline=1&iv_load_policy=3&start=0&enablejsapi=1&origin=https://www.mxplayer.in&widgetid=1'.format(video['stream']['youtube'].get('id'))
-                weburl = urlresolver.HostedMediaFile(url=stream_url).resolve()
+                weburl = resolveurl.HostedMediaFile(url=stream_url).resolve()
             elif video['stream']['sony'] is not None: 
             	weburl = video['stream']['sony'].get('hlsUrl')
             elif video['stream']['thirdParty'] is not None: 
             	weburl = video['stream']['thirdParty'].get('hlsUrl')
-            elif video['stream']['altBalaji'] is not None: 	
-				videoid=video['stream']['altBalaji'].get('dashId') 
-				weburl = video['stream']['altBalaji'].get('hlsUrl')
+            elif video['stream']['altBalaji'] is not None:
+            	videoid=video['stream']['altBalaji'].get('dashId')
+            	weburl = video['stream']['altBalaji'].get('hlsUrl')
             elif video['stream']['hls'] is not None:
                 if  video['stream']['hls'].get('base')  is not None:
                 	base_url=video['stream']['hls'].get('base')
                 else:
-            		base_url=video['stream']['hls'].get('high')
+                	base_url=video['stream']['hls'].get('high')
                 if base_url[:4]=='http':
                     weburl=base_url          
                 else:
@@ -409,7 +440,7 @@ class MxPlayerPlugin(object):
         list_item = xbmcgui.ListItem(label=title)
 
         # Set additional info for the list item.
-
+        #web_pdb.set_trace()
         description=self.get_description(video)
         
         list_item.setInfo('video', {
@@ -429,9 +460,10 @@ class MxPlayerPlugin(object):
         if VideoType != 'liveChannel':
 	        list_image, cover_image = MxPlayerPlugin.get_images(video)
 	        list_item.setArt({
+	        	'poster': cover_image or list_image,
 	            'thumb': list_image or cover_image,
 	            'icon': list_image or cover_image,
-	            'fanart': cover_image or list_image,
+	            'fanart': list_image or cover_image,
 	        })
 
         # Set 'IsPlayable' property to 'true'.
@@ -449,7 +481,7 @@ class MxPlayerPlugin(object):
 
         # Add our item to the Kodi virtual folder listing.
         xbmcplugin.addDirectoryItem(self.handle, url, list_item, is_folder)
-        xbmcplugin.setContent(self.handle, 'videos')
+        xbmcplugin.setContent(self.handle, 'movies')
 
         
     def add_directory_item(
@@ -558,7 +590,7 @@ class MxPlayerPlugin(object):
         if not content:
             return content
 
-        if isinstance(content, unicode):
+        if isinstance(content, six.text_type):
             content = unicodedata.normalize('NFKD', content).encode('ascii', 'ignore')
 
         return content
@@ -574,10 +606,10 @@ class MxPlayerPlugin(object):
         """
         valid_kwargs = {
             key: MxPlayerPlugin.safe_string(value)
-            for key, value in kwargs.iteritems()
+            for key, value in kwargs.items()
             if value is not None
         }
-        return '{0}?{1}'.format(self.plugin_url, urlencode(valid_kwargs))
+        return '{0}?{1}'.format(self.plugin_url, urllib_parse.urlencode(valid_kwargs))
 
         
     def play_video(self, item_id, title, video_url):
@@ -595,25 +627,22 @@ class MxPlayerPlugin(object):
                 
         play_item = xbmcgui.ListItem(label=title, path=video_url)
 
-        #header=self._get_headers()
-        #licURL='https://api.mxplay.com/v1/drm/balaji/ticket/?&streamId={}'.format(item_id)
+        header=self._get_headers()
 
-        #header="User-Agent=Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/74.0.3729.169 Safari/537.36"
-        #header=header+"&content_provider=xstream1"
-        #web_pdb.set_trace()
+        play_item.setProperty('inputstreamaddon', 'inputstream.adaptive')
 
-        play_item.setProperty('inputstream.adaptive.license_type', 'com.widevine.alpha')
         if (video_url.find('mpd') != -1):
         	play_item.setProperty('inputstream.adaptive.manifest_type', 'mpd')
+        	play_item.setMimeType('application/dash+xml')
         else:
         	play_item.setProperty('inputstream.adaptive.manifest_type', 'hls')
-        play_item.setProperty('inputstreamaddon', 'inputstream.adaptive')
-        play_item.setMimeType('application/dash+xml')
+        	play_item.setMimeType('application/vnd.apple.mpegurl')
+
         play_item.setContentLookup(False)
-
-
+        play_item.setProperty("inputstream.adaptive.stream_headers", urllib_parse.urlencode(header))
+        #
+        #play_item.setProperty('inputstream.adaptive.license_type', 'com.widevine.alpha')
         #play_item.setProperty('inputstream.adaptive.license_key', licURL)
-        #play_item.setProperty("inputstream.adaptive.stream_headers", header)
 
         # Pass the item to the Kodi player.
         xbmcplugin.setResolvedUrl(self.handle, True, listitem=play_item)     
@@ -636,29 +665,6 @@ class MxPlayerPlugin(object):
         return '{url}'.format(url=hls_url)
        
 
-
-    def list_main(self):
-        # Set plugin category. It is displayed in some skins as the name
-        # of the current section.
-        xbmcplugin.setPluginCategory(self.handle, 'main')
-
-        for category in MxPlayerPlugin.MAIN_CATEGORIES['Main']:
-            self.add_directory_item(
-                content_id=category[0],
-                title=category[1],
-                description=category[1],
-                action='sections',
-                section_next='first',
-                item=None
-            )
-
-        self.add_search_item()
-
-        # Add a sort method for the virtual folder items (alphabetically, ignore articles)
-        xbmcplugin.addSortMethod(self.handle, xbmcplugin.SORT_METHOD_NONE)
-
-        # Finish creating a virtual folder.
-        xbmcplugin.endOfDirectory(self.handle)
         
     def router(self):
         """
@@ -666,7 +672,7 @@ class MxPlayerPlugin(object):
         """
         # Check the parameters passed to the plugin
         logger.info('Handling route params -- {}'.format(self.params))
-
+        #web_pdb.set_trace()
         if self.params:
             action = self.params.get('action')
             content_id = self.params.get('content_id')
